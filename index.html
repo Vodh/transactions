@@ -41,6 +41,20 @@ form button{grid-column:1/-1}
 .delete-button:hover{background:#b91c1c}
 .clear-button{background:#475569;margin-top:12px}
 .clear-button:hover{background:#64748b}
+.transaction-view-all{text-align:center;margin-top:12px}
+.transaction-view-all button{background:#475569}
+.transaction-view-all button:hover{background:#64748b}
+.transaction-modal{position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:2000;display:none;align-items:center;justify-content:center;padding:20px}
+.transaction-modal.open{display:flex}
+.transaction-modal-content{width:min(760px,100%);max-height:90vh;overflow:hidden;background:#1e293b;border:1px solid #475569;border-radius:16px;padding:20px;box-shadow:0 8px 30px rgba(0,0,0,.4)}
+.transaction-modal-header{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:15px}
+.transaction-modal-close{background:#475569;padding:8px 12px}
+.transaction-search{width:100%;margin-bottom:15px}
+.transaction-modal-list{max-height:65vh;overflow-y:auto}
+.transaction-modal-list .transaction:last-child{margin-bottom:0}
+body.theme-light .transaction-modal-content{background:#fff;border-color:#cbd5e1}
+body.theme-light .transaction-modal-close{background:#e2e8f0;color:#1e293b}
+body.theme-light .transaction-modal{background:rgba(15,23,42,.45)}
 .actions{text-align:right}
 .export-controls{display:grid;grid-template-columns:1fr 1fr auto;gap:15px;align-items:end}
 .export-controls .input-group{display:flex;flex-direction:column;gap:7px}
@@ -177,13 +191,13 @@ body.theme-system{background:#05070d;color:#d9e7ff}body.theme-system header h1{l
 
 <section class="card">
 <h2>Daily Spending</h2>
-<div class="chart-mode-row"><p id="dailyChartLabel">This week</p><button id="dailyChartToggle" class="small-toggle" type="button">Month</button></div>
+<div class="chart-mode-row"><p id="dailyChartLabel">This week</p><div><button id="dailyChartPrev" class="small-toggle" type="button">Previous</button> <button id="dailyChartNext" class="small-toggle" type="button">Next</button> <button id="dailyChartToggle" class="small-toggle" type="button">Month</button></div></div>
 <div class="chart-container"><canvas id="dailySpendingChart"></canvas></div>
 </section>
 
 <section class="card">
 <h2>Spending Chart</h2>
-<div class="chart-mode-row"><p id="spendingChartLabel">This week</p><select id="spendingChartMode" class="small-toggle" aria-label="Spending chart timeframe"><option value="week" selected>Weekly</option><option value="month">Monthly</option><option value="year">Yearly</option><option value="alltime">All time</option></select></div>
+<div class="chart-mode-row"><p id="spendingChartLabel">This week</p><div><button id="spendingChartPrev" class="small-toggle" type="button">Previous</button> <button id="spendingChartNext" class="small-toggle" type="button">Next</button> <select id="spendingChartMode" class="small-toggle" aria-label="Spending chart timeframe"><option value="week" selected>Weekly</option><option value="month">Monthly</option><option value="year">Yearly</option><option value="alltime">All time</option></select></div></div>
 <div class="chart-container">
 <canvas id="expenseChart"></canvas>
 </div>
@@ -206,6 +220,16 @@ body.theme-system{background:#05070d;color:#d9e7ff}body.theme-system header h1{l
 <button class="clear-button" id="clearAll">Clear All Transactions</button>
 </div>
 </section>
+<div id="transactionModal" class="transaction-modal" aria-hidden="true">
+  <div class="transaction-modal-content" role="dialog" aria-modal="true" aria-labelledby="transactionModalTitle">
+    <div class="transaction-modal-header">
+      <h2 id="transactionModalTitle">All Transactions</h2>
+      <button id="transactionModalClose" class="transaction-modal-close" type="button">Close</button>
+    </div>
+    <input id="transactionSearch" class="transaction-search" type="search" placeholder="Search by description or price">
+    <div id="transactionModalList" class="transaction-modal-list"></div>
+  </div>
+</div>
 
 </main>
 
@@ -234,7 +258,7 @@ document.addEventListener("click",e=>{if(!themeMenu.contains(e.target)&&e.target
 
 let transactions=JSON.parse(localStorage.getItem("expenseTransactions")||"[]");
 let categories=JSON.parse(localStorage.getItem("expenseCategories")||'["Food","Transport","Shopping","Entertainment","Bills","Other"]');
-let chart=null;let dailyChart=null;let dailyChartMode="week";let spendingChartMode="week";
+let chart=null;let dailyChart=null;let dailyChartMode="week";let dailyChartOffset=0;let spendingChartMode="week";let spendingChartOffset=0;
 
 const form=document.getElementById("transactionForm");
 const description=document.getElementById("description");
@@ -243,7 +267,7 @@ const category=document.getElementById("category");
 const date=document.getElementById("date");
 const transactionList=document.getElementById("transactionList");
 const totalAmount=document.getElementById("totalAmount");
-const categoryTotals=document.getElementById("categoryTotals");const dailyChartToggle=document.getElementById("dailyChartToggle");const dailyChartLabel=document.getElementById("dailyChartLabel");const spendingChartModeSelect=document.getElementById("spendingChartMode");const spendingChartLabel=document.getElementById("spendingChartLabel");
+const categoryTotals=document.getElementById("categoryTotals");const dailyChartToggle=document.getElementById("dailyChartToggle");const dailyChartLabel=document.getElementById("dailyChartLabel");const dailyChartPrev=document.getElementById("dailyChartPrev");const dailyChartNext=document.getElementById("dailyChartNext");const spendingChartModeSelect=document.getElementById("spendingChartMode");const spendingChartLabel=document.getElementById("spendingChartLabel");const spendingChartPrev=document.getElementById("spendingChartPrev");const spendingChartNext=document.getElementById("spendingChartNext");
 const newCategory=document.getElementById("newCategory");
 const addCategoryButton=document.getElementById("addCategoryButton");
 
@@ -271,16 +295,20 @@ renderChart();
 renderDailyChart();
 }
 
-function renderTransactions(){
-transactionList.innerHTML="";
-if(!transactions.length){
-transactionList.innerHTML='<p class="empty">No transactions yet. Add one above!</p>';
-return;
+function transactionDateValue(t){
+const parts=String(t.date).split("-").map(Number);
+return parts.length===3 && parts.every(Number.isFinite)?new Date(parts[0],parts[1]-1,parts[2]).getTime():0;
 }
-[...transactions].reverse().forEach(t=>{
-const div=document.createElement("div");
-div.className="transaction";
-div.innerHTML=`
+
+function sortedTransactions(){
+return [...transactions].sort((a,b)=>{
+const dateDiff=transactionDateValue(b)-transactionDateValue(a);
+return dateDiff!==0?dateDiff:Number(b.id)-Number(a.id);
+});
+}
+
+function transactionHTML(t){
+return `<div class="transaction">
 <div class="transaction-info">
 <h3>${escapeHTML(t.description)}</h3>
 <p>${escapeHTML(t.category)} • ${escapeHTML(t.date)}</p>
@@ -288,11 +316,26 @@ div.innerHTML=`
 <div class="transaction-right">
 <div class="transaction-amount">₹${Number(t.amount).toFixed(2)}</div>
 <button class="delete-button" onclick="deleteTransaction(${t.id})">Delete</button>
+</div>
 </div>`;
-transactionList.appendChild(div);
-});
 }
 
+function renderTransactions(){
+transactionList.innerHTML="";
+if(!transactions.length){
+transactionList.innerHTML='<p class="empty">No transactions yet. Add one above!</p>';
+return;
+}
+const recent=sortedTransactions().slice(0,10);
+recent.forEach(t=>transactionList.insertAdjacentHTML("beforeend",transactionHTML(t)));
+if(transactions.length>10){
+const viewAll=document.createElement("div");
+viewAll.className="transaction-view-all";
+viewAll.innerHTML='<button id="viewAllTransactions" type="button">View All Transactions</button>';
+transactionList.appendChild(viewAll);
+document.getElementById("viewAllTransactions").addEventListener("click",openTransactionModal);
+}
+}
 function renderTotals(){
 const total=transactions.reduce((sum,t)=>sum+Number(t.amount),0);
 totalAmount.textContent="₹"+total.toFixed(2);
@@ -319,29 +362,8 @@ categoryTotals.appendChild(row);
 });
 }
 
-function renderDailyChart(){const canvas=document.getElementById("dailySpendingChart");if(dailyChart){dailyChart.destroy();dailyChart=null}const now=new Date(),year=now.getFullYear(),month=now.getMonth();let labels=[],dates=[];if(dailyChartMode==="week"){const today=new Date(year,month,now.getDate());const monday=new Date(today);monday.setDate(today.getDate()-((today.getDay()+6)%7));for(let i=0;i<7;i++){const d=new Date(monday);d.setDate(monday.getDate()+i);dates.push(d);labels.push(d.toLocaleDateString(undefined,{weekday:"short"}))}dailyChartLabel.textContent="This week";dailyChartToggle.textContent="Month"}else{const days=new Date(year,month+1,0).getDate();for(let i=1;i<=days;i++){dates.push(new Date(year,month,i));labels.push(String(i))}dailyChartLabel.textContent="This month";dailyChartToggle.textContent="Week"}const totals=dates.map(d=>{const key=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;return transactions.filter(t=>t.date===key).reduce((sum,t)=>sum+Number(t.amount),0)});dailyChart=new Chart(canvas,{type:"bar",data:{labels,datasets:[{label:"Daily spending",data:totals}]},options:{responsive:true,plugins:{legend:{display:false}},scales:{y:{beginAtZero:true,ticks:{callback:value=>"₹"+value}}}}})}
-dailyChartToggle.addEventListener("click",()=>{dailyChartMode=dailyChartMode==="week"?"month":"week";renderDailyChart()});
-
-function getChartTransactions(){
-const now=new Date();
-const today=new Date(now.getFullYear(),now.getMonth(),now.getDate());
-if(spendingChartMode==="alltime")return transactions;
-if(spendingChartMode==="week"){
-const monday=new Date(today);
-monday.setDate(today.getDate()-((today.getDay()+6)%7));
-const key=monday.toISOString().slice(0,10);
-return transactions.filter(t=>t.date>=key && t.date<=today.toISOString().slice(0,10));
-}
-if(spendingChartMode==="month"){
-const start=new Date(today.getFullYear(),today.getMonth(),1);
-const key=start.toISOString().slice(0,10);
-return transactions.filter(t=>t.date>=key && t.date<=today.toISOString().slice(0,10));
-}
-const start=new Date(today.getFullYear(),0,1);
-const key=start.toISOString().slice(0,10);
-return transactions.filter(t=>t.date>=key && t.date<=today.toISOString().slice(0,10));
-}
-
+function renderDailyChart(){const canvas=document.getElementById("dailySpendingChart");if(dailyChart){dailyChart.destroy();dailyChart=null}const now=new Date(),year=now.getFullYear(),month=now.getMonth();let labels=[],dates=[];if(dailyChartMode==="week"){const today=new Date(year,month,now.getDate());const monday=new Date(today);monday.setDate(today.getDate()-((today.getDay()+6)%7)-dailyChartOffset*7);for(let i=0;i<7;i++){const d=new Date(monday);d.setDate(monday.getDate()+i);dates.push(d);labels.push(d.toLocaleDateString(undefined,{weekday:"short"}))}dailyChartLabel.textContent=dailyChartOffset===0?"This week":`${monday.toLocaleDateString(undefined,{day:"numeric",month:"short"})} - ${new Date(monday.getFullYear(),monday.getMonth(),monday.getDate()+6).toLocaleDateString(undefined,{day:"numeric",month:"short"})}`;dailyChartToggle.textContent="Month"}else{const first=new Date(year,month-dailyChartOffset,1);const days=new Date(first.getFullYear(),first.getMonth()+1,0).getDate();for(let i=1;i<=days;i++){dates.push(new Date(first.getFullYear(),first.getMonth(),i));labels.push(String(i))}dailyChartLabel.textContent=dailyChartOffset===0?"This month":first.toLocaleDateString(undefined,{month:"long",year:"numeric"});dailyChartToggle.textContent="Week"}const totals=dates.map(d=>{const key=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;return transactions.filter(t=>t.date===key).reduce((sum,t)=>sum+Number(t.amount),0)});dailyChart=new Chart(canvas,{type:"bar",data:{labels,datasets:[{label:"Daily spending",data:totals}]},options:{responsive:true,plugins:{legend:{display:false}},scales:{y:{beginAtZero:true,ticks:{callback:value=>"₹"+value}}}}})}
+function getChartTransactions(){const now=new Date();const today=new Date(now.getFullYear(),now.getMonth(),now.getDate());if(spendingChartMode==="alltime")return transactions;if(spendingChartMode==="week"){const end=new Date(today);end.setDate(today.getDate()-spendingChartOffset*7);const start=new Date(end);start.setDate(end.getDate()-6);const keyStart=`${start.getFullYear()}-${String(start.getMonth()+1).padStart(2,"0")}-${String(start.getDate()).padStart(2,"0")}`;const keyEnd=`${end.getFullYear()}-${String(end.getMonth()+1).padStart(2,"0")}-${String(end.getDate()).padStart(2,"0")}`;return transactions.filter(t=>t.date>=keyStart&&t.date<=keyEnd)}if(spendingChartMode==="month"){const end=new Date(today.getFullYear(),today.getMonth()-spendingChartOffset+1,0);const start=new Date(end.getFullYear(),end.getMonth(),1);const keyStart=`${start.getFullYear()}-${String(start.getMonth()+1).padStart(2,"0")}-01`;const keyEnd=`${end.getFullYear()}-${String(end.getMonth()+1).padStart(2,"0")}-${String(end.getDate()).padStart(2,"0")}`;return transactions.filter(t=>t.date>=keyStart&&t.date<=keyEnd)}const start=new Date(today.getFullYear(),0,1);const keyStart=`${start.getFullYear()}-01-01`;const keyEnd=`${today.getFullYear()}-12-31`;return transactions.filter(t=>t.date>=keyStart&&t.date<=keyEnd)}
 function renderChart(){
 const totals={};
 getChartTransactions().forEach(t=>{
@@ -359,7 +381,9 @@ data:{labels:entries.map(x=>x[0]),datasets:[{data:entries.map(x=>x[1])}]},
 options:{responsive:true,plugins:{legend:{position:"bottom"}}}
 });
 }
-spendingChartModeSelect.addEventListener("change",()=>{spendingChartMode=spendingChartModeSelect.value;renderChart()});
+spendingChartModeSelect.addEventListener("change",()=>{spendingChartMode=spendingChartModeSelect.value;spendingChartOffset=0;renderChart()});
+spendingChartPrev.addEventListener("click",()=>{if((spendingChartMode==="week"||spendingChartMode==="month")&&spendingChartOffset<10){spendingChartOffset++;renderChart()}});
+spendingChartNext.addEventListener("click",()=>{if((spendingChartMode==="week"||spendingChartMode==="month")&&spendingChartOffset>0){spendingChartOffset--;renderChart()}});
 
 form.addEventListener("submit",e=>{
 e.preventDefault();
@@ -398,10 +422,56 @@ save();render();
 
 document.getElementById("clearAll").addEventListener("click",()=>{
 if(!transactions.length)return;
-if(confirm("Delete all transactions? This cannot be undone.")){
+if(window.confirm("Delete all transactions? This cannot be undone.")){
 transactions=[];save();render();
+if(typeof transactionModal!=="undefined")closeTransactionModal();
 }
 });
+
+const transactionModal=document.getElementById("transactionModal");
+const transactionModalList=document.getElementById("transactionModalList");
+const transactionSearch=document.getElementById("transactionSearch");
+const transactionModalClose=document.getElementById("transactionModalClose");
+
+function renderAllTransactions(searchText=""){
+const query=searchText.trim().toLowerCase();
+const matches=sortedTransactions().filter(t=>{
+if(!query)return true;
+const descriptionText=String(t.description).toLowerCase();
+const priceText=String(t.amount).toLowerCase();
+const formattedPrice=Number(t.amount).toFixed(2);
+return descriptionText.includes(query)||priceText.includes(query)||formattedPrice.includes(query);
+});
+transactionModalList.innerHTML="";
+if(!matches.length){
+transactionModalList.innerHTML='<p class="empty">No matching transactions.</p>';
+return;
+}
+matches.forEach(t=>transactionModalList.insertAdjacentHTML("beforeend",transactionHTML(t)));
+}
+
+function openTransactionModal(){
+renderAllTransactions();
+transactionModal.classList.add("open");
+transactionModal.setAttribute("aria-hidden","false");
+transactionSearch.value="";
+setTimeout(()=>transactionSearch.focus(),0);
+}
+
+function closeTransactionModal(){
+transactionModal.classList.remove("open");
+transactionModal.setAttribute("aria-hidden","true");
+}
+
+transactionSearch.addEventListener("input",()=>renderAllTransactions(transactionSearch.value));
+transactionModalClose.addEventListener("click",closeTransactionModal);
+transactionModal.addEventListener("click",e=>{
+if(e.target===transactionModal)closeTransactionModal();
+});
+document.addEventListener("keydown",e=>{
+if(e.key==="Escape" && transactionModal.classList.contains("open"))closeTransactionModal();
+});
+
 
 // ------------------------------------
 // IMPORT CSV
