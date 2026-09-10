@@ -1,0 +1,607 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Expense Tracker</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:Arial,sans-serif;background:#0f172a;color:#e2e8f0;min-height:100vh}
+header{text-align:center;padding:38px 20px 28px}
+header h1{font-size:36px;margin-bottom:8px}
+header p{color:#94a3b8}
+main{width:92%;max-width:950px;margin:auto}
+.card{background:#1e293b;padding:24px;margin-bottom:20px;border-radius:16px;box-shadow:0 8px 25px rgba(0,0,0,.22)}
+.card h2{margin-bottom:18px}
+form{display:grid;grid-template-columns:1fr 1fr;gap:15px}
+.input-group{display:flex;flex-direction:column;gap:7px}
+.input-group.full{grid-column:1/-1}
+label{font-size:14px;color:#cbd5e1}
+input,select{padding:12px;border:1px solid #475569;border-radius:9px;background:#334155;color:#fff;font-size:15px}
+input:focus,select:focus{outline:2px solid #3b82f6}
+button{padding:12px 18px;border:0;border-radius:9px;background:#2563eb;color:#fff;font-size:15px;cursor:pointer}
+button:hover{background:#1d4ed8}
+form button{grid-column:1/-1}
+.category-input{display:flex;gap:10px}
+.category-input input{flex:1}
+.total-card{text-align:center}
+#totalAmount{font-size:38px;font-weight:bold;color:#60a5fa}
+.category-row{display:flex;justify-content:space-between;padding:13px 4px;border-bottom:1px solid #334155}
+.category-row:last-child{border-bottom:0}
+.category-value{color:#60a5fa;font-weight:bold}
+.chart-container{max-width:500px;margin:auto}
+#transactionList p.empty{color:#94a3b8;text-align:center;padding:15px}
+.transaction{display:flex;justify-content:space-between;align-items:center;padding:15px;margin-bottom:10px;background:#334155;border-radius:10px}
+.transaction-info h3{margin-bottom:5px}
+.transaction-info p{color:#94a3b8;font-size:13px}
+.transaction-right{text-align:right}
+.transaction-amount{font-weight:bold;margin-bottom:8px}
+.delete-button{background:#dc2626;padding:6px 10px;font-size:12px}
+.delete-button:hover{background:#b91c1c}
+.clear-button{background:#475569;margin-top:12px}
+.clear-button:hover{background:#64748b}
+.actions{text-align:right}
+.export-controls{display:grid;grid-template-columns:1fr 1fr auto;gap:15px;align-items:end}
+.export-controls .input-group{display:flex;flex-direction:column;gap:7px}
+.export-message{margin-top:12px;color:#94a3b8;font-size:14px}
+.export-message.success{color:#86efac}
+.export-message.error{color:#fca5a5}
+.import-controls{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.import-controls input[type="file"]{display:none}
+.file-label{padding:12px 18px;border-radius:9px;background:#334155;color:#fff;cursor:pointer;border:1px solid #475569}
+.file-label:hover{background:#475569}
+.import-hint{margin-top:10px;color:#94a3b8;font-size:13px}
+.import-message{margin-top:10px;color:#94a3b8;font-size:14px}
+.import-message.success{color:#86efac}
+.import-message.error{color:#fca5a5}
+
+@media(max-width:650px){
+.options-menu{right:8px;width:calc(100vw - 16px);top:58px}
+.options-menu .export-controls{grid-template-columns:1fr}
+form{grid-template-columns:1fr}
+.input-group.full,form button{grid-column:auto}
+.category-input{flex-direction:column}
+.export-controls{grid-template-columns:1fr}
+.import-controls{flex-direction:column;align-items:stretch}
+.transaction{flex-direction:column;align-items:flex-start;gap:10px}
+.transaction-right{text-align:left}
+}
+
+.options-button{position:fixed;top:14px;right:14px;width:38px;height:38px;padding:0;border-radius:50%;font-size:19px;background:#334155;border:1px solid #475569;z-index:1001}
+.options-button:hover{background:#475569}
+.options-menu{position:fixed;top:60px;right:14px;width:min(260px,calc(100vw - 28px));max-height:calc(100vh - 74px);overflow-y:auto;background:#1e293b;border:1px solid #475569;border-radius:12px;padding:14px;box-shadow:0 8px 25px rgba(0,0,0,.3);z-index:1000;display:none}
+.options-menu.open{display:block}
+.options-menu .card{background:transparent;padding:0;margin:0;box-shadow:none}
+.options-menu h3{margin-bottom:14px}
+.options-menu section{margin-bottom:16px}
+.options-menu section:last-child{margin-bottom:0}
+.options-menu .category-input{display:flex;gap:8px}
+.options-menu .category-input input{min-width:0}
+.options-menu .import-controls{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.options-menu .import-controls .file-label{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.options-menu .export-controls{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:10px}
+.options-menu .export-controls input{width:100%;min-width:0}
+.options-menu .export-controls button{grid-column:1/-1}
+.options-menu .file-label{padding:10px 12px}
+.options-menu .import-hint{font-size:12px}
+.options-menu .export-message,.options-menu .import-message{font-size:12px}
+
+body{transition:background .2s,color .2s}
+body.theme-light{background:#f5f7fb;color:#1e293b}body.theme-light header p{color:#64748b}body.theme-light .card{background:#fff;box-shadow:0 8px 25px rgba(15,23,42,.10)}body.theme-light label{color:#475569}body.theme-light input,body.theme-light select{background:#f8fafc;color:#1e293b;border-color:#cbd5e1}body.theme-light .file-label{background:#e2e8f0;color:#1e293b;border-color:#cbd5e1}body.theme-light .options-menu,body.theme-light .theme-menu{background:#fff;border-color:#cbd5e1}body.theme-light .options-button,body.theme-light .theme-button{background:#e2e8f0;color:#1e293b;border-color:#cbd5e1}body.theme-light .theme-menu button{color:#1e293b}body.theme-light .theme-menu button:hover{background:#f1f5f9}
+body.theme-dark{background:#0f172a;color:#e2e8f0}
+body.theme-paper{background:#eee4cf;color:#3d3426}body.theme-paper header p{color:#756956}body.theme-paper .card{background:#f8f0df;border:1px solid #d8c8aa;box-shadow:0 5px 16px rgba(73,55,30,.10);border-radius:10px}body.theme-paper input,body.theme-paper select{background:#fffaf0;color:#3d3426;border-color:#cdbb9b}body.theme-paper label{color:#665744}body.theme-paper button{background:#7b5e3b}body.theme-paper button:hover{background:#654a2d}body.theme-paper #totalAmount{color:#7b5e3b}body.theme-paper .options-button,body.theme-paper .theme-button{background:#e1d3ba;color:#3d3426;border-color:#c8b696}body.theme-paper .options-menu,body.theme-paper .theme-menu{background:#f8f0df;border-color:#cdbb9b}body.theme-paper .theme-menu button{color:#3d3426}body.theme-paper .theme-menu button:hover{background:#eadfc9}
+body.theme-system{background:#05070d;color:#d9e7ff}body.theme-system header h1{letter-spacing:2px;text-transform:uppercase}body.theme-system header p{color:#6f8fc4}body.theme-system .card{background:#0b1020;border:1px solid #263d69;box-shadow:0 0 18px rgba(45,108,255,.12);border-radius:8px}body.theme-system input,body.theme-system select{background:#080d19;color:#d9e7ff;border-color:#29477d}body.theme-system label{color:#88a9df}body.theme-system button{background:#245cff;border-radius:6px}body.theme-system button:hover{background:#1747d5}body.theme-system #totalAmount{color:#5e9cff}body.theme-system .options-button,body.theme-system .theme-button{background:#0b1428;color:#8eb5ff;border-color:#2e5ba4}body.theme-system .options-menu,body.theme-system .theme-menu{background:#0b1020;border-color:#2e5ba4;box-shadow:0 0 20px rgba(36,92,255,.18)}body.theme-system .theme-menu button{color:#d9e7ff}body.theme-system .theme-menu button:hover{background:#111d36}
+.theme-button{position:fixed;top:14px;right:60px;width:38px;height:38px;padding:0;border-radius:50%;font-size:18px;background:#334155;border:1px solid #475569;z-index:1001}.theme-button:hover{background:#475569}.theme-menu{position:fixed;top:60px;right:60px;width:155px;background:#1e293b;border:1px solid #475569;border-radius:12px;padding:6px;box-shadow:0 8px 25px rgba(0,0,0,.3);z-index:1002;display:none}.theme-menu.open{display:block}.theme-menu button{display:block;width:100%;padding:9px 10px;text-align:left;background:transparent;border:0;color:#e2e8f0;font-size:14px}.theme-menu button:hover{background:#334155}.chart-mode-row{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:-6px 0 15px}.chart-mode-row p{color:#94a3b8;font-size:14px}.small-toggle{padding:8px 12px;font-size:13px}@media(max-width:650px){.theme-button{right:54px}.theme-menu{right:54px;width:145px}}
+</style>
+</head>
+<body>
+<button id="optionsButton" class="options-button" type="button" aria-label="More options" title="More options">⋮</button>
+<button id="themeButton" class="theme-button" type="button" aria-label="Change theme" title="Change theme">☼</button>
+<div id="themeMenu" class="theme-menu" aria-hidden="true">
+<button type="button" data-theme="light">Light</button><button type="button" data-theme="dark">Dark</button><button type="button" data-theme="paper">Paper</button><button type="button" data-theme="system">Solo Leveling</button>
+</div>
+<div id="optionsMenu" class="options-menu" aria-hidden="true">
+  <h3>More Options</h3>
+  <section>
+    <h4>Add Category</h4>
+    <div class="category-input">
+      <input id="newCategory" type="text" placeholder="e.g. Gaming">
+      <button id="addCategoryButton" type="button">Add</button>
+    </div>
+  </section>
+  <section>
+    <h4>Import Transactions</h4>
+    <div class="import-controls">
+      <label class="file-label" for="importCSV">Choose CSV file</label>
+      <input id="importCSV" type="file" accept=".csv,text/csv">
+      <button id="importButton" type="button">Import</button>
+    </div>
+    <p class="import-hint">Use columns: Date, Description, Category, Amount (INR).</p>
+    <p id="importMessage" class="import-message"></p>
+  </section>
+  <section>
+    <h4>Export Transactions</h4>
+    <div class="export-controls">
+      <div class="input-group">
+        <label for="exportStart">Start date</label>
+        <input id="exportStart" type="date">
+      </div>
+      <div class="input-group">
+        <label for="exportEnd">End date</label>
+        <input id="exportEnd" type="date">
+      </div>
+      <button id="exportCSV" type="button">Export CSV</button>
+    </div>
+    <p id="exportMessage" class="export-message"></p>
+  </section>
+</div>
+
+
+<header>
+<h1>Expense Tracker</h1>
+<p>Track your spending and see where your money goes.</p>
+</header>
+
+<main>
+
+<section class="card">
+<h2>Add Transaction</h2>
+<form id="transactionForm">
+<div class="input-group">
+<label for="description">Description</label>
+<input id="description" type="text" placeholder="e.g. Lunch" required>
+</div>
+<div class="input-group">
+<label for="amount">Amount (₹)</label>
+<input id="amount" type="number" min="0" step="0.01" placeholder="e.g. 250" required>
+</div>
+<div class="input-group">
+<label for="category">Category</label>
+<select id="category" required></select>
+</div>
+<div class="input-group">
+<label for="date">Date</label>
+<input id="date" type="date" required>
+</div>
+<button type="submit">Add Transaction</button>
+</form>
+</section>
+
+
+
+
+
+
+
+
+<section class="card">
+<h2>Daily Spending</h2>
+<div class="chart-mode-row"><p id="dailyChartLabel">This week</p><button id="dailyChartToggle" class="small-toggle" type="button">Month</button></div>
+<div class="chart-container"><canvas id="dailySpendingChart"></canvas></div>
+</section>
+
+<section class="card">
+<h2>Spending Chart</h2>
+<div class="chart-container">
+<canvas id="expenseChart"></canvas>
+</div>
+</section>
+
+<section class="card total-card">
+<h2>Total Spending</h2>
+<p id="totalAmount">₹0.00</p>
+</section>
+
+<section class="card">
+<h2>Spending by Category</h2>
+<div id="categoryTotals"></div>
+</section>
+
+<section class="card">
+<h2>Transactions</h2>
+<div id="transactionList"></div>
+<div class="actions">
+<button class="clear-button" id="clearAll">Clear All Transactions</button>
+</div>
+</section>
+
+</main>
+
+<script>
+
+const optionsButton=document.getElementById("optionsButton");
+const optionsMenu=document.getElementById("optionsMenu");
+optionsButton.addEventListener("click",e=>{
+  e.stopPropagation();
+  optionsMenu.classList.toggle("open");
+  optionsMenu.setAttribute("aria-hidden",optionsMenu.classList.contains("open")?"false":"true");
+});
+document.addEventListener("click",e=>{
+  if(!optionsMenu.contains(e.target) && e.target!==optionsButton){
+    optionsMenu.classList.remove("open");
+    optionsMenu.setAttribute("aria-hidden","true");
+  }
+});
+
+const themeButton=document.getElementById("themeButton");const themeMenu=document.getElementById("themeMenu");
+function applyTheme(theme){document.body.classList.remove("theme-light","theme-dark","theme-paper","theme-system");document.body.classList.add("theme-"+theme);localStorage.setItem("expenseTheme",theme);themeMenu.classList.remove("open");themeMenu.setAttribute("aria-hidden","true");}
+applyTheme(localStorage.getItem("expenseTheme")||"light");
+themeButton.addEventListener("click",e=>{e.stopPropagation();themeMenu.classList.toggle("open");themeMenu.setAttribute("aria-hidden",themeMenu.classList.contains("open")?"false":"true")});
+themeMenu.querySelectorAll("button").forEach(b=>b.addEventListener("click",()=>applyTheme(b.dataset.theme)));
+document.addEventListener("click",e=>{if(!themeMenu.contains(e.target)&&e.target!==themeButton){themeMenu.classList.remove("open");themeMenu.setAttribute("aria-hidden","true")}});
+
+let transactions=JSON.parse(localStorage.getItem("expenseTransactions")||"[]");
+let categories=JSON.parse(localStorage.getItem("expenseCategories")||'["Food","Transport","Shopping","Entertainment","Bills","Other"]');
+let chart=null;let dailyChart=null;let dailyChartMode="week";
+
+const form=document.getElementById("transactionForm");
+const description=document.getElementById("description");
+const amount=document.getElementById("amount");
+const category=document.getElementById("category");
+const date=document.getElementById("date");
+const transactionList=document.getElementById("transactionList");
+const totalAmount=document.getElementById("totalAmount");
+const categoryTotals=document.getElementById("categoryTotals");const dailyChartToggle=document.getElementById("dailyChartToggle");const dailyChartLabel=document.getElementById("dailyChartLabel");
+const newCategory=document.getElementById("newCategory");
+const addCategoryButton=document.getElementById("addCategoryButton");
+
+date.value=new Date().toISOString().split("T")[0];
+
+function save(){
+localStorage.setItem("expenseTransactions",JSON.stringify(transactions));
+localStorage.setItem("expenseCategories",JSON.stringify(categories));
+}
+
+function renderCategories(){
+category.innerHTML="";
+categories.forEach(c=>{
+const option=document.createElement("option");
+option.value=c; option.textContent=c;
+category.appendChild(option);
+});
+}
+
+function render(){
+renderTransactions();
+renderTotals();
+renderCategoryTotals();
+renderChart();
+renderDailyChart();
+}
+
+function renderTransactions(){
+transactionList.innerHTML="";
+if(!transactions.length){
+transactionList.innerHTML='<p class="empty">No transactions yet. Add one above!</p>';
+return;
+}
+[...transactions].reverse().forEach(t=>{
+const div=document.createElement("div");
+div.className="transaction";
+div.innerHTML=`
+<div class="transaction-info">
+<h3>${escapeHTML(t.description)}</h3>
+<p>${escapeHTML(t.category)} • ${escapeHTML(t.date)}</p>
+</div>
+<div class="transaction-right">
+<div class="transaction-amount">₹${Number(t.amount).toFixed(2)}</div>
+<button class="delete-button" onclick="deleteTransaction(${t.id})">Delete</button>
+</div>`;
+transactionList.appendChild(div);
+});
+}
+
+function renderTotals(){
+const total=transactions.reduce((sum,t)=>sum+Number(t.amount),0);
+totalAmount.textContent="₹"+total.toFixed(2);
+}
+
+function getCategoryTotals(){
+const totals={};
+categories.forEach(c=>totals[c]=0);
+transactions.forEach(t=>{
+if(!(t.category in totals)) totals[t.category]=0;
+totals[t.category]+=Number(t.amount);
+});
+return totals;
+}
+
+function renderCategoryTotals(){
+const totals=getCategoryTotals();
+categoryTotals.innerHTML="";
+Object.entries(totals).forEach(([c,v])=>{
+const row=document.createElement("div");
+row.className="category-row";
+row.innerHTML=`<span>${escapeHTML(c)}</span><span class="category-value">₹${v.toFixed(2)}</span>`;
+categoryTotals.appendChild(row);
+});
+}
+
+function renderDailyChart(){const canvas=document.getElementById("dailySpendingChart");if(dailyChart){dailyChart.destroy();dailyChart=null}const now=new Date(),year=now.getFullYear(),month=now.getMonth();let labels=[],dates=[];if(dailyChartMode==="week"){const today=new Date(year,month,now.getDate());const monday=new Date(today);monday.setDate(today.getDate()-((today.getDay()+6)%7));for(let i=0;i<7;i++){const d=new Date(monday);d.setDate(monday.getDate()+i);dates.push(d);labels.push(d.toLocaleDateString(undefined,{weekday:"short"}))}dailyChartLabel.textContent="This week";dailyChartToggle.textContent="Month"}else{const days=new Date(year,month+1,0).getDate();for(let i=1;i<=days;i++){dates.push(new Date(year,month,i));labels.push(String(i))}dailyChartLabel.textContent="This month";dailyChartToggle.textContent="Week"}const totals=dates.map(d=>{const key=d.toISOString().slice(0,10);return transactions.filter(t=>t.date===key).reduce((sum,t)=>sum+Number(t.amount),0)});dailyChart=new Chart(canvas,{type:"bar",data:{labels,datasets:[{label:"Daily spending",data:totals}]},options:{responsive:true,plugins:{legend:{display:false}},scales:{y:{beginAtZero:true,ticks:{callback:value=>"₹"+value}}}}})}
+dailyChartToggle.addEventListener("click",()=>{dailyChartMode=dailyChartMode==="week"?"month":"week";renderDailyChart()});
+
+function renderChart(){
+const totals=getCategoryTotals();
+const entries=Object.entries(totals).filter(([c,v])=>v>0);
+if(chart){chart.destroy();chart=null}
+if(!entries.length)return;
+chart=new Chart(document.getElementById("expenseChart"),{
+type:"pie",
+data:{
+labels:entries.map(x=>x[0]),
+datasets:[{data:entries.map(x=>x[1])}]
+},
+options:{
+responsive:true,
+plugins:{legend:{position:"bottom"}}
+}
+});
+}
+
+form.addEventListener("submit",e=>{
+e.preventDefault();
+transactions.push({
+id:Date.now(),
+description:description.value.trim(),
+amount:Number(amount.value),
+category:category.value,
+date:date.value
+});
+save(); render();
+form.reset();
+date.value=new Date().toISOString().split("T")[0];
+});
+
+addCategoryButton.addEventListener("click",()=>{
+const c=newCategory.value.trim();
+if(!c)return;
+if(categories.some(x=>x.toLowerCase()===c.toLowerCase())){
+alert("That category already exists.");
+return;
+}
+categories.push(c);
+newCategory.value="";
+save(); renderCategories(); renderCategoryTotals();
+});
+
+newCategory.addEventListener("keydown",e=>{
+if(e.key==="Enter"){e.preventDefault();addCategoryButton.click();}
+});
+
+function deleteTransaction(id){
+transactions=transactions.filter(t=>t.id!==id);
+save();render();
+}
+
+document.getElementById("clearAll").addEventListener("click",()=>{
+if(!transactions.length)return;
+if(confirm("Delete all transactions? This cannot be undone.")){
+transactions=[];save();render();
+}
+});
+
+// ------------------------------------
+// IMPORT CSV
+// ------------------------------------
+
+document.getElementById("importButton").addEventListener("click",()=>{
+const fileInput=document.getElementById("importCSV");
+const message=document.getElementById("importMessage");
+const file=fileInput.files[0];
+
+message.className="import-message";
+
+if(!file){
+message.textContent="Please choose a CSV file first.";
+message.classList.add("error");
+return;
+}
+
+const reader=new FileReader();
+
+reader.onload=function(event){
+try{
+const rows=parseCSV(event.target.result);
+
+if(rows.length<2){
+throw new Error("The CSV does not contain any transactions.");
+}
+
+const headers=rows[0].map(h=>h.trim().toLowerCase());
+
+const dateIndex=findHeader(headers,["date"]);
+const descriptionIndex=findHeader(headers,["description"]);
+const categoryIndex=findHeader(headers,["category"]);
+const amountIndex=findHeader(headers,["amount (inr)","amount","amount inr"]);
+
+if(dateIndex===-1 || descriptionIndex===-1 || categoryIndex===-1 || amountIndex===-1){
+throw new Error("CSV must contain Date, Description, Category and Amount (INR) columns.");
+}
+
+const imported=[];
+let skipped=0;
+
+for(let i=1;i<rows.length;i++){
+const row=rows[i];
+
+if(row.every(cell=>cell.trim()==="")) continue;
+
+const dateValue=(row[dateIndex]||"").trim();
+const descriptionValue=(row[descriptionIndex]||"").trim();
+const categoryValue=(row[categoryIndex]||"").trim();
+const amountText=(row[amountIndex]||"").trim().replace(/[₹,]/g,"");
+const amountValue=Number(amountText);
+
+if(!/^\d{4}-\d{2}-\d{2}$/.test(dateValue) ||
+!descriptionValue ||
+!categoryValue ||
+!Number.isFinite(amountValue)){
+skipped++;
+continue;
+}
+
+let storedCategory=categories.find(c=>c.toLowerCase()===categoryValue.toLowerCase());
+
+if(!storedCategory){
+categories.push(categoryValue);
+storedCategory=categoryValue;
+}
+
+imported.push({
+id:Date.now()+i+Math.floor(Math.random()*100000),
+description:descriptionValue,
+amount:amountValue,
+category:storedCategory,
+date:dateValue
+});
+}
+
+if(!imported.length){
+throw new Error("No valid transactions were found in the CSV.");
+}
+
+transactions.push(...imported);
+
+save();
+renderCategories();
+render();
+
+fileInput.value="";
+
+message.textContent=`Imported ${imported.length} transaction${imported.length===1?"":"s"}${skipped?` (${skipped} skipped)`: ""}.`;
+message.classList.add("success");
+
+}catch(error){
+message.textContent=error.message;
+message.classList.add("error");
+}
+};
+
+reader.onerror=function(){
+message.textContent="Could not read the file.";
+message.classList.add("error");
+};
+
+reader.readAsText(file);
+});
+
+function findHeader(headers,names){
+for(const name of names){
+const index=headers.indexOf(name);
+if(index!==-1)return index;
+}
+return -1;
+}
+
+function parseCSV(text){
+const rows=[];
+let row=[];
+let cell="";
+let inQuotes=false;
+
+for(let i=0;i<text.length;i++){
+const char=text[i];
+
+if(char==='"'){
+if(inQuotes && text[i+1]==='"'){
+cell+='"';
+i++;
+}else{
+inQuotes=!inQuotes;
+}
+}else if(char===',' && !inQuotes){
+row.push(cell);
+cell="";
+}else if((char==='\n'||char==='\r') && !inQuotes){
+if(char==='\r' && text[i+1]==='\n')i++;
+row.push(cell);
+rows.push(row);
+row=[];
+cell="";
+}else{
+cell+=char;
+}
+}
+
+if(cell!=="" || row.length){
+row.push(cell);
+rows.push(row);
+}
+
+return rows;
+}
+
+// ------------------------------------
+// EXPORT CSV BY DATE RANGE
+// ------------------------------------
+
+document.getElementById("exportCSV").addEventListener("click",()=>{
+const start=document.getElementById("exportStart").value;
+const end=document.getElementById("exportEnd").value;
+const message=document.getElementById("exportMessage");
+
+message.className="export-message";
+
+if(!start || !end){
+message.textContent="Please select both a start date and an end date.";
+message.classList.add("error");
+return;
+}
+
+if(start>end){
+message.textContent="The start date cannot be after the end date.";
+message.classList.add("error");
+return;
+}
+
+const filtered=transactions.filter(t=>t.date>=start && t.date<=end);
+
+if(!filtered.length){
+message.textContent="No transactions were found in that timeframe.";
+message.classList.add("error");
+return;
+}
+
+const rows=[
+["Date","Description","Category","Amount (INR)"],
+...filtered.map(t=>[
+t.date,
+t.description,
+t.category,
+Number(t.amount).toFixed(2)
+])
+];
+
+const csv=rows.map(row=>row.map(csvEscape).join(",")).join("\r\n");
+const blob=new Blob([csv],{type:"text/csv;charset=utf-8;"});
+const url=URL.createObjectURL(blob);
+const link=document.createElement("a");
+
+link.href=url;
+link.download=`transactions_${start}_to_${end}.csv`;
+document.body.appendChild(link);
+link.click();
+document.body.removeChild(link);
+URL.revokeObjectURL(url);
+
+message.textContent=`Exported ${filtered.length} transaction${filtered.length===1?"":"s"} from ${start} to ${end}.`;
+message.classList.add("success");
+});
+
+function csvEscape(value){
+const text=String(value);
+return /[",\n\r]/.test(text) ? '"' + text.replace(/"/g,'""') + '"' : text;
+}
+
+function escapeHTML(str){
+return String(str).replace(/[&<>"']/g,m=>({
+"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"
+}[m]));
+}
+
+renderCategories();
+render();
+</script>
+</body>
+</html>
