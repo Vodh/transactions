@@ -385,6 +385,10 @@ spendingChartModeSelect.addEventListener("change",()=>{spendingChartMode=spendin
 spendingChartPrev.addEventListener("click",()=>{if((spendingChartMode==="week"||spendingChartMode==="month")&&spendingChartOffset<10){spendingChartOffset++;renderChart()}});
 spendingChartNext.addEventListener("click",()=>{if((spendingChartMode==="week"||spendingChartMode==="month")&&spendingChartOffset>0){spendingChartOffset--;renderChart()}});
 
+dailyChartPrev.addEventListener("click",()=>{if(dailyChartOffset<10){dailyChartOffset++;renderDailyChart()}});
+dailyChartNext.addEventListener("click",()=>{if(dailyChartOffset>0){dailyChartOffset--;renderDailyChart()}});
+dailyChartToggle.addEventListener("click",()=>{dailyChartMode=dailyChartMode==="week"?"month":"week";dailyChartOffset=0;renderDailyChart()});
+
 form.addEventListener("submit",e=>{
 e.preventDefault();
 transactions.push({
