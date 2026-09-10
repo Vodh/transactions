@@ -183,6 +183,7 @@ body.theme-system{background:#05070d;color:#d9e7ff}body.theme-system header h1{l
 
 <section class="card">
 <h2>Spending Chart</h2>
+<div class="chart-mode-row"><p id="spendingChartLabel">This week</p><select id="spendingChartMode" class="small-toggle" aria-label="Spending chart timeframe"><option value="week" selected>Weekly</option><option value="month">Monthly</option><option value="year">Yearly</option><option value="alltime">All time</option></select></div>
 <div class="chart-container">
 <canvas id="expenseChart"></canvas>
 </div>
@@ -233,7 +234,7 @@ document.addEventListener("click",e=>{if(!themeMenu.contains(e.target)&&e.target
 
 let transactions=JSON.parse(localStorage.getItem("expenseTransactions")||"[]");
 let categories=JSON.parse(localStorage.getItem("expenseCategories")||'["Food","Transport","Shopping","Entertainment","Bills","Other"]');
-let chart=null;let dailyChart=null;let dailyChartMode="week";
+let chart=null;let dailyChart=null;let dailyChartMode="week";let spendingChartMode="week";
 
 const form=document.getElementById("transactionForm");
 const description=document.getElementById("description");
@@ -242,7 +243,7 @@ const category=document.getElementById("category");
 const date=document.getElementById("date");
 const transactionList=document.getElementById("transactionList");
 const totalAmount=document.getElementById("totalAmount");
-const categoryTotals=document.getElementById("categoryTotals");const dailyChartToggle=document.getElementById("dailyChartToggle");const dailyChartLabel=document.getElementById("dailyChartLabel");
+const categoryTotals=document.getElementById("categoryTotals");const dailyChartToggle=document.getElementById("dailyChartToggle");const dailyChartLabel=document.getElementById("dailyChartLabel");const spendingChartModeSelect=document.getElementById("spendingChartMode");const spendingChartLabel=document.getElementById("spendingChartLabel");
 const newCategory=document.getElementById("newCategory");
 const addCategoryButton=document.getElementById("addCategoryButton");
 
@@ -321,23 +322,44 @@ categoryTotals.appendChild(row);
 function renderDailyChart(){const canvas=document.getElementById("dailySpendingChart");if(dailyChart){dailyChart.destroy();dailyChart=null}const now=new Date(),year=now.getFullYear(),month=now.getMonth();let labels=[],dates=[];if(dailyChartMode==="week"){const today=new Date(year,month,now.getDate());const monday=new Date(today);monday.setDate(today.getDate()-((today.getDay()+6)%7));for(let i=0;i<7;i++){const d=new Date(monday);d.setDate(monday.getDate()+i);dates.push(d);labels.push(d.toLocaleDateString(undefined,{weekday:"short"}))}dailyChartLabel.textContent="This week";dailyChartToggle.textContent="Month"}else{const days=new Date(year,month+1,0).getDate();for(let i=1;i<=days;i++){dates.push(new Date(year,month,i));labels.push(String(i))}dailyChartLabel.textContent="This month";dailyChartToggle.textContent="Week"}const totals=dates.map(d=>{const key=d.toISOString().slice(0,10);return transactions.filter(t=>t.date===key).reduce((sum,t)=>sum+Number(t.amount),0)});dailyChart=new Chart(canvas,{type:"bar",data:{labels,datasets:[{label:"Daily spending",data:totals}]},options:{responsive:true,plugins:{legend:{display:false}},scales:{y:{beginAtZero:true,ticks:{callback:value=>"₹"+value}}}}})}
 dailyChartToggle.addEventListener("click",()=>{dailyChartMode=dailyChartMode==="week"?"month":"week";renderDailyChart()});
 
+function getChartTransactions(){
+const now=new Date();
+const today=new Date(now.getFullYear(),now.getMonth(),now.getDate());
+if(spendingChartMode==="alltime")return transactions;
+if(spendingChartMode==="week"){
+const monday=new Date(today);
+monday.setDate(today.getDate()-((today.getDay()+6)%7));
+const key=monday.toISOString().slice(0,10);
+return transactions.filter(t=>t.date>=key && t.date<=today.toISOString().slice(0,10));
+}
+if(spendingChartMode==="month"){
+const start=new Date(today.getFullYear(),today.getMonth(),1);
+const key=start.toISOString().slice(0,10);
+return transactions.filter(t=>t.date>=key && t.date<=today.toISOString().slice(0,10));
+}
+const start=new Date(today.getFullYear(),0,1);
+const key=start.toISOString().slice(0,10);
+return transactions.filter(t=>t.date>=key && t.date<=today.toISOString().slice(0,10));
+}
+
 function renderChart(){
-const totals=getCategoryTotals();
+const totals={};
+getChartTransactions().forEach(t=>{
+if(!(t.category in totals))totals[t.category]=0;
+totals[t.category]+=Number(t.amount);
+});
 const entries=Object.entries(totals).filter(([c,v])=>v>0);
 if(chart){chart.destroy();chart=null}
+const labels={week:"This week",month:"This month",year:"This year",alltime:"All time"};
+spendingChartLabel.textContent=labels[spendingChartMode];
 if(!entries.length)return;
 chart=new Chart(document.getElementById("expenseChart"),{
 type:"pie",
-data:{
-labels:entries.map(x=>x[0]),
-datasets:[{data:entries.map(x=>x[1])}]
-},
-options:{
-responsive:true,
-plugins:{legend:{position:"bottom"}}
-}
+data:{labels:entries.map(x=>x[0]),datasets:[{data:entries.map(x=>x[1])}]},
+options:{responsive:true,plugins:{legend:{position:"bottom"}}}
 });
 }
+spendingChartModeSelect.addEventListener("change",()=>{spendingChartMode=spendingChartModeSelect.value;renderChart()});
 
 form.addEventListener("submit",e=>{
 e.preventDefault();
